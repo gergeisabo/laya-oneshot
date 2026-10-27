@@ -1,0 +1,9 @@
+{
+  "difficulty": {
+    "type": "score",
+    "instructions": "How hard is this request for a language model?",
+    "criteria": ["trivial: a lookup or one-liner", "easy: short answer, no reasoning", "moderate: several steps", "hard: long multi-step reasoning or specialist knowledge"]
+  },
+  "needs_code": {"type": "noul", "instructions": "Does answering require writing or debugging code?"},
+  "needs_fresh_data": {"type": "noul", "instructions": "Does answering require information newer than the model's training?"}
+}

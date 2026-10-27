@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "laya-oneshot"
+version = "0.1.0"
+description = "Cold-start typed decisions from an open Laya model: load, answer, exit. No daemon, no port, no resident RAM."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Gergely Szabo", email = "ask@gergeisabo.me"}]
+keywords = ["laya", "jev", "decision", "mlx", "system-one", "cli"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Libraries :: Command-line Tools",
+]
+dependencies = []
+
+[project.scripts]
+laya-oneshot = "laya_oneshot.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/gergeisabo/laya-oneshot"
+
+[tool.setuptools]
+packages = ["laya_oneshot"]
+
+[tool.setuptools.package-data]
+laya_oneshot = ["presets/*.json"]
