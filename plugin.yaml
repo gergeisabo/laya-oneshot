@@ -1,0 +1,27 @@
+name: laya-oneshot
+label: Laya One-Shot Decisions
+kind: standalone
+version: 0.1.0
+description: >
+  Ask typed questions about a piece of text — yes/no, pick one of N, score on a
+  scale — and get calibrated probabilities back in about a second, from an open
+  Laya model that is not running. Loads the checkpoint, answers, exits: no
+  server, no port, no resident memory. Runs the model locally or on another
+  machine over ssh.
+author: Gergely Szabo
+license: MIT
+homepage: https://github.com/gergeisabo/laya-oneshot
+tags: [decisions, classification, laya, jev, triage, local-models]
+requires_hermes: ">=0.22.0"
+platforms: [linux, macos]
+provides_tools:
+  - laya_decide
+provides_hooks: []
+requires_env: []
+external_dependencies:
+  - name: laya-oneshot
+    check: "laya-oneshot --version"
+    install: "uv tool install git+https://github.com/gergeisabo/laya-oneshot"
+  - name: laya-mlx
+    check: "python3 -c 'import laya_mlx'"
+    install: "pip install laya-mlx   # only on the machine that runs the model"

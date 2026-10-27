@@ -124,6 +124,25 @@ ships **uncalibrated** — treat its numbers as a ranking, not a confidence.
 - Long inputs: the English checkpoint reads 512 tokens, the multilingual one 1024 (8192 with
   `max_len`), and accuracy falls away well before the limit.
 
+## Inside Hermes Agent
+
+Two ways, neither of which needs a plugin store:
+
+```console
+# 1. as a skill (instructions only, no review, works today)
+hermes skills install gergeisabo/laya-oneshot
+
+# 2. as a plugin (one `laya_decide` tool in the agent's toolset)
+hermes plugins install gergeisabo/laya-oneshot
+hermes plugins enable laya-oneshot
+```
+
+The repo carries a `plugin.yaml` that passes `hermes plugins validate` (manifest, capability
+probe, security scan, no core overrides). Catalog listing — the one that shows up in
+`hermes plugins search` for everyone — is a separate PR to `NousResearch/hermes-agent` pinning
+this repository at a full commit SHA; the entry is drafted in `contrib/plugin-catalog-entry.yaml`
+once that review is worth opening.
+
 ## Credit
 
 The model is [Laya](https://github.com/NandhaKishorM/laya) by Nandakishor M (Convai
