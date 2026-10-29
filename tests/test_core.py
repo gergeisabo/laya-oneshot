@@ -2,9 +2,10 @@
 import base64
 import json
 import unittest
+from unittest import mock
 
 from laya_oneshot.questions import from_args, load_preset, pick_checkpoint
-from laya_oneshot.transport import remote_command
+from laya_oneshot.transport import TransportError, remote_command, run_remote
 from laya_oneshot.cli import bar, render
 
 
@@ -98,6 +99,23 @@ class TestRemoteCommand(unittest.TestCase):
         cmd = remote_command(payload)
         self.assertIn("touch /tmp/pwned", cmd)      # inside quotes, not executed as a separate command
         self.assertNotIn("; touch /tmp/pwned;", cmd)
+
+
+class TestRemoteHost(unittest.TestCase):
+    payload = {"state": "hi", "questions": {}, "model": "convaiinnovations/laya"}
+
+    def test_host_follows_end_of_options(self):
+        done = mock.Mock(returncode=0, stdout='{"answers": {}}', stderr="")
+        with mock.patch("laya_oneshot.transport.subprocess.run", return_value=done) as run:
+            run_remote(self.payload, "me@example.internal")
+        argv = run.call_args[0][0]
+        self.assertEqual(argv[argv.index("--") + 1], "me@example.internal")
+
+    def test_option_shaped_host_is_refused(self):
+        with mock.patch("laya_oneshot.transport.subprocess.run") as run:
+            with self.assertRaises(TransportError):
+                run_remote(self.payload, "-oSomeOption=value")
+        run.assert_not_called()
 
 
 class TestRender(unittest.TestCase):

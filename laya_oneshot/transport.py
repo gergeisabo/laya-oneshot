@@ -88,8 +88,11 @@ def remote_command(payload: dict, predict: str = DEFAULT_PREDICT) -> str:
 
 def run_remote(payload: dict, host: str, predict: str = DEFAULT_PREDICT,
                timeout: int = 180, ssh_options: list[str] | None = None) -> Result:
+    if not host or host.startswith("-"):
+        raise TransportError(f"invalid ssh host {host!r}")
     opts = ssh_options or ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
-    cmd = ["ssh", *opts, host, remote_command(payload, predict)]
+    # `--` ends ssh's option parsing, so the host is always read as a destination.
+    cmd = ["ssh", *opts, "--", host, remote_command(payload, predict)]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as exc:
