@@ -143,6 +143,31 @@ probe, security scan, no core overrides). Catalog listing — the one that shows
 this repository at a full commit SHA; the entry is drafted in `contrib/plugin-catalog-entry.yaml`
 once that review is worth opening.
 
+## Measured, not claimed
+
+Five tasks, 115 calls, zero failures, p50 1.4 s / p95 2.4 s (4 concurrent). Ground truth: my own
+labels for the synthetic sets, the git file list for the gate test, the folder name for the routing
+test. Labels are mine, so treat the numbers as a shape, not a benchmark table.
+
+| Task | Result | What it means |
+|---|---|---|
+| Email triage, 4 categories, 12 mails | 9/12 (75%) | security mails read as "billing" — BEC is the weak class |
+| Domain routing, 20 real skill docs | 12/20 (60%) | long abstract prose defeats 4-way classification |
+| same, sharper label descriptions | 11/20 (55%) | better wording did not help; the task shape is the problem |
+| "Documentation-only?" gate, 29 commits | 26/29 (90%) | 18/18 code commits never passed as docs — safe failure direction |
+| Phishing / not, 8 emails (4 scams) | 7/8 (88%) | 4/4 scams caught, 1 false positive on a real reset mail |
+| Hungarian triage, 6 mails | 4/6 (67%) | billing ↔ technical confusion |
+
+Two lessons from running it, both in the design of the questions rather than the model:
+
+1. **Ask narrow questions.** The bank-details mail scored "billing" 0.61 as a 4-way category, and
+   0.99 when asked directly "is this phishing?". Multiple yes/no questions beat one wide choice.
+2. **Short, concrete inputs.** A 1,500-character internal document about a research pipeline really
+   does read like a devops note. Feed it a message, not a manual.
+
+Confidence numbers are not calibrated — right and wrong answers both arrive at 0.5–1.0. Read the
+ranking, and put a human behind any threshold you have not tuned on your own examples.
+
 ## Credit
 
 The model is [Laya](https://github.com/NandhaKishorM/laya) by Nandakishor M (Convai
