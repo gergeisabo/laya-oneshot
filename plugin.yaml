@@ -19,9 +19,6 @@ provides_tools:
 provides_hooks: []
 requires_env: []
 external_dependencies:
-  - name: laya-oneshot
-    check: "laya-oneshot --version"
-    install: "uv tool install git+https://github.com/gergeisabo/laya-oneshot"
   - name: laya-mlx
     check: "python3 -c 'import laya_mlx'"
     install: "pip install laya-mlx   # only on the machine that runs the model"

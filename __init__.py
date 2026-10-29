@@ -3,31 +3,28 @@
 Thin wrapper over the `laya-oneshot` CLI. The CLI owns the model handling; this
 plugin only exposes one tool so an agent can ask a typed question without a
 shell round trip.
+
+The plugin runs the `laya_oneshot` package that ships next to this file, so the
+code that runs is the code that was installed with the plugin. The ssh host is
+read only from the user's own config (`~/.config/laya-oneshot/config` or
+`LAYA_ONESHOT_HOST`), never from the tool call.
 """
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 PLUGIN_NAME = "laya-oneshot"
 
-_CANDIDATES = (
-    Path.home() / ".local/bin/laya-oneshot",
-    Path.home() / ".local/share/uv/tools/laya-oneshot/bin/laya-oneshot",
-    Path("/opt/homebrew/bin/laya-oneshot"),
-)
+_PLUGIN_DIR = Path(__file__).resolve().parent
 
 
-def _cli() -> str | None:
-    found = shutil.which("laya-oneshot")
-    if found:
-        return found
-    for candidate in _CANDIDATES:
-        if candidate.exists():
-            return str(candidate)
-    return None
+def _cli() -> list[str] | None:
+    if not (_PLUGIN_DIR / "laya_oneshot" / "cli.py").is_file():
+        return None
+    return [sys.executable, "-m", "laya_oneshot.cli"]
 
 
 def _decide(args=None, **kw):
@@ -40,23 +37,21 @@ def _decide(args=None, **kw):
     if not cli:
         return json.dumps({
             "error": "laya-oneshot is not installed",
-            "install": "uv tool install git+https://github.com/gergeisabo/laya-oneshot",
+            "install": "reinstall the plugin: hermes plugins install gergeisabo/laya-oneshot",
         })
 
-    cmd = [cli, "--json"]
+    cmd = [*cli, "--json"]
     preset = args.get("preset")
     if preset:
         cmd += ["--preset", str(preset)]
     for question in args.get("ask") or []:
         cmd += ["--ask", str(question)]
-    if args.get("host"):
-        cmd += ["--host", str(args["host"])]
     if args.get("model"):
         cmd += ["--model", str(args["model"])]
     cmd += ["--", state]
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180, cwd=_PLUGIN_DIR)
     except subprocess.TimeoutExpired:
         return json.dumps({"error": "the decision model did not answer in 180s"})
     if proc.returncode != 0:
@@ -98,10 +93,6 @@ def register(ctx):
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Your own yes/no questions instead of a preset. Repeatable.",
-                    },
-                    "host": {
-                        "type": "string",
-                        "description": "Run the model on this ssh host instead of locally, e.g. me@10.0.0.5.",
                     },
                     "model": {
                         "type": "string",
