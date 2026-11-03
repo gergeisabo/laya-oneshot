@@ -3,7 +3,7 @@ import base64
 import json
 import unittest
 
-from laya_oneshot.questions import from_args, load_preset, pick_checkpoint
+from laya_oneshot.questions import choose_checkpoint, from_args, load_preset, pick_checkpoint
 from laya_oneshot.transport import remote_command
 from laya_oneshot.cli import bar, render
 
@@ -64,6 +64,74 @@ class TestCheckpoint(unittest.TestCase):
 
     def test_explicit_repo_passes_through(self):
         self.assertEqual(pick_checkpoint("x", "someone/custom-laya"), "someone/custom-laya")
+
+
+class TestCheckpointLanguage(unittest.TestCase):
+    """0.1.0 shipped a non-ASCII test only, so accentless Hungarian silently ran on the
+    English checkpoint and was confidently wrong. These are the regression tests."""
+
+    def test_accentless_hungarian_is_detected(self):
+        text = "kerem a penzt vissza, nem kell a szamla, csak a visszaterites"
+        repo, why = choose_checkpoint(text)
+        self.assertEqual(repo, "convaiinnovations/laya-multilingual")
+        self.assertIn("without accents", why)
+
+    def test_short_accentless_hungarian_with_one_hit(self):
+        repo, _ = choose_checkpoint("nem kell")
+        self.assertEqual(repo, "convaiinnovations/laya-multilingual")
+
+    def test_plain_english_stays_english(self):
+        for text in ("Refund me today or I am cancelling.",
+                     "The van is red and the ferry leaves at six.",
+                     "Please send the invoice to accounting."):
+            self.assertEqual(choose_checkpoint(text)[0], "convaiinnovations/laya", text)
+
+    def test_explicit_language_beats_the_heuristic(self):
+        repo, why = choose_checkpoint("Refund me today", language="hu")
+        self.assertEqual(repo, "convaiinnovations/laya-multilingual")
+        self.assertIn("language=hu", why)
+        repo, _ = choose_checkpoint("kerem a penzt vissza", language="en")
+        self.assertEqual(repo, "convaiinnovations/laya")
+
+    def test_unknown_language_raises(self):
+        with self.assertRaises(ValueError):
+            choose_checkpoint("hello", language="klingon")
+
+    def test_requested_model_still_wins(self):
+        repo, why = choose_checkpoint("kerem a penzt", requested="laya")
+        self.assertEqual(repo, "convaiinnovations/laya")
+        self.assertEqual(why, "requested")
+
+    def test_hungarian_with_accents(self):
+        repo, why = choose_checkpoint("kérem a pénzt vissza")
+        self.assertEqual(repo, "convaiinnovations/laya-multilingual")
+        self.assertIn("non-ASCII", why)
+
+
+class TestWaitFlag(unittest.TestCase):
+    def test_remote_failure_is_not_a_negative_answer(self):
+        from laya_oneshot.transport import TransportError
+        from laya_oneshot.cli import _with_wait
+        calls = {"n": 0}
+
+        def boom(*a, **k):
+            calls["n"] += 1
+            raise TransportError("no route to host")
+
+        import laya_oneshot.cli as cli_mod
+        original = cli_mod.run_remote
+        cli_mod.run_remote = boom
+        try:
+            with self.assertRaises(TransportError) as ctx:
+                _with_wait("host", {"state": "x"}, "laya-mlx", 5, 0)
+            self.assertIn("not a negative answer", str(ctx.exception))
+            self.assertEqual(calls["n"], 1)
+            calls["n"] = 0
+            with self.assertRaises(TransportError):
+                _with_wait("host", {"state": "x"}, "laya-mlx", 5, 2)
+            self.assertGreaterEqual(calls["n"], 2)
+        finally:
+            cli_mod.run_remote = original
 
 
 class TestRemoteCommand(unittest.TestCase):

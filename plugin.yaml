@@ -1,7 +1,7 @@
 name: laya-oneshot
 label: Laya One-Shot Decisions
 kind: standalone
-version: 0.1.0
+version: 0.2.0
 description: >
   Ask typed questions about a piece of text — yes/no, pick one of N, score on a
   scale — and get calibrated probabilities back in about a second, from an open

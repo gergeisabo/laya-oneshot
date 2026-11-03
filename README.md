@@ -95,8 +95,18 @@ fast instead of prompting). Everything else happens in one ssh round trip: the p
 base64-encoded, in a temp dir that is removed on exit. Nothing is installed on the remote host,
 and nothing survives the call.
 
-The host has to be awake — a machine that is asleep cannot answer, and you get
-`2` with `is it asleep?` rather than a hang.
+The host has to be awake. A sleeping machine cannot answer, and it will not wake for ssh, so a
+batch that runs overnight will silently collect failures. Two things make that survivable:
+
+- `--wait SECONDS` keeps retrying while the host is unreachable, then gives up with exit `2` and
+  the words *"this is not a negative answer"* — so a sleeper is never scored as a `no`.
+- On macOS, `caffeinate -s` in a LaunchAgent keeps the machine awake **only while it is on AC
+  power**: plugged in it stays reachable, unplugged it naps as usual. It asserts no CPU and no
+  memory — the model still loads per call.
+
+If a host is unreachable, check the transport before the model: `netbird status` / `ping` first, and
+only then the service. On 2026-11-03 a ten-minute sleep of the model host produced exactly the
+same `exit 2` as a broken server would have.
 
 ## The checkpoint trap
 
@@ -111,9 +121,23 @@ $ laya-oneshot "Harmadszor terheltek meg tévesen idén. A pénzt ma visszakére
 intent           cancellation            █████████████████████░░░ 0.96
 ```
 
-`laya-oneshot` picks `convaiinnovations/laya-multilingual` whenever the text contains a
-non-ASCII character. Pass `--model` to override. Note also that the multilingual checkpoint
-ships **uncalibrated** — treat its numbers as a ranking, not a confidence.
+0.1.0 picked the checkpoint from one test: "does the text contain a non-ASCII character?" That
+misses **Hungarian written without accents**, which is common in chat and short replies, so
+`kerem a penzt vissza` ran on the English checkpoint — silently, and confidently wrong. 0.2.0
+tests for Hungarian words and digraphs as well:
+
+```console
+$ laya-oneshot --dry-run --ask "Is this urgent?" "kerem a penzt vissza, nem kell a szamla"
+"model": "convaiinnovations/laya-multilingual",
+"checkpoint_because": "Hungarian words without accents (6 hits, 4 digraphs)"
+```
+
+The check is a heuristic, so you can skip it: `--language hu` (or `en`) forces the checkpoint,
+and `language=hu` in the config applies it to every call. Set it explicitly in any pipeline whose
+language you already know — a heuristic should not be the last word. `--model` still overrides both.
+
+Note also that the multilingual checkpoint ships **uncalibrated** — treat its numbers as a ranking,
+not a confidence.
 
 ## When not to use it
 

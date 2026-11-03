@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "laya-oneshot"
-version = "0.1.0"
+version = "0.2.0"
 description = "Cold-start typed decisions from an open Laya model: load, answer, exit. No daemon, no port, no resident RAM."
 readme = "README.md"
 requires-python = ">=3.10"

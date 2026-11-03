@@ -14,7 +14,7 @@ import sys
 import time
 
 from . import __version__
-from .questions import from_args, load_preset, pick_checkpoint
+from .questions import choose_checkpoint, from_args, load_preset
 from .transport import DEFAULT_PREDICT, TransportError, run_local, run_remote
 
 CONFIG_PATH = os.path.expanduser("~/.config/laya-oneshot/config")
@@ -37,7 +37,8 @@ def read_config() -> dict:
     return config
 
 
-def render(body: dict, questions: dict, elapsed_ms: float, transport: str, route: str | None) -> str:
+def render(body: dict, questions: dict, elapsed_ms: float, transport: str, route: str | None,
+           why: str | None = None) -> str:
     lines = []
     for name, answer in (body.get("answers") or {}).items():
         kind = answer.get("type")
@@ -62,7 +63,8 @@ def render(body: dict, questions: dict, elapsed_ms: float, transport: str, route
                          f"{'█' * filled}{'░' * (12 - filled)} {legend}")
     usage = body.get("usage") or {}
     lines.append("")
-    lines.append(f"{route or '?'} · {usage.get('input_tokens', '?')} tokens · "
+    reason = f" ({why})" if why and why != "requested" else ""
+    lines.append(f"{route or '?'}{reason} · {usage.get('input_tokens', '?')} tokens · "
                  f"{elapsed_ms:.0f} ms · {transport}")
     if route and route.endswith("multilingual"):
         lines.append("note: the multilingual checkpoint ships uncalibrated — read probabilities as rough ranks.")
@@ -72,6 +74,23 @@ def render(body: dict, questions: dict, elapsed_ms: float, transport: str, route
 def bar(value: float, width: int = 24) -> str:
     filled = round(width * max(0.0, min(1.0, value)))
     return "█" * filled + "░" * (width - filled)
+
+
+def _with_wait(host, payload, predict, timeout, wait):
+    """Retry while the host is unreachable. A sleeper is not a negative answer."""
+    deadline = time.time() + max(0, wait)
+    attempts = 0
+    while True:
+        attempts += 1
+        try:
+            return run_remote(payload, host, predict, timeout=timeout), attempts
+        except TransportError as exc:
+            remaining = deadline - time.time()
+            if remaining <= 1:
+                raise TransportError(
+                    f"{exc} — gave up after {attempts} attempt(s). The host is asleep or "
+                    f"offline; this is not a negative answer, re-run it.") from exc
+            time.sleep(min(5.0, remaining))
 
 
 def top_probability(body: dict) -> float | None:
@@ -102,6 +121,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--level", action="append", metavar="TEXT",
                         help="a level for the previous --ask, lowest first (makes it a score)")
     parser.add_argument("--model", help="force a checkpoint (repo id or laya/multilingual); default: by script")
+    parser.add_argument("--language", choices=["auto", "en", "hu"],
+                        help="how to read the text: auto (default) guesses from the script and Hungarian words; "
+                             "en/hu skip the guess. Set it when you already know, e.g. in a mail pipeline")
+    parser.add_argument("--wait", type=int, default=0, metavar="SECONDS",
+                        help="keep retrying while the model host is unreachable, up to this many seconds "
+                             "(default 0: fail at once). A sleeping host is not a 'no'")
     parser.add_argument("--host", help="run on this ssh host instead of locally, e.g. my-mac")
     parser.add_argument("--predict", help=f"path to the laya-mlx CLI (default: {DEFAULT_PREDICT})")
     parser.add_argument("--timeout", type=int, default=180, help="seconds before giving up (default: 180)")
@@ -130,23 +155,29 @@ def main(argv: list[str] | None = None) -> int:
     except (ValueError, IndexError) as exc:
         parser.error(str(exc))
 
-    model = pick_checkpoint(state, args.model or config.get("model"))
+    try:
+        model, why = choose_checkpoint(state, args.model or config.get("model"),
+                                       args.language or config.get("language"))
+    except ValueError as exc:
+        parser.error(str(exc))
     payload = {"state": state, "questions": questions, "model": model}
 
     host = args.host or config.get("host")
     predict = args.predict or config.get("predict") or DEFAULT_PREDICT
 
     if args.dry_run:
-        print(json.dumps({"payload": payload, "host": host, "predict": predict}, indent=2, ensure_ascii=False))
+        print(json.dumps({"payload": payload, "host": host, "predict": predict,
+                          "checkpoint_because": why}, indent=2, ensure_ascii=False))
         if host:
             from .transport import remote_command
             print("\nremote command:\n" + remote_command(payload, predict))
         return 0
 
     started = time.time()
+    attempts = 0
     try:
         if host:
-            result = run_remote(payload, host, predict, timeout=args.timeout)
+            result, attempts = _with_wait(host, payload, predict, args.timeout, args.wait)
         else:
             result = run_local(payload, predict, timeout=args.timeout)
     except TransportError as exc:
@@ -158,7 +189,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(result.body, indent=2, ensure_ascii=False))
     else:
-        print(render(result.body, questions, elapsed, result.transport, route))
+        print(render(result.body, questions, elapsed, result.transport, route, why))
+        if attempts > 1:
+            print(f"(retried {attempts} times — the model host was unreachable at first)")
 
     threshold = args.threshold if args.threshold is not None else _float_or_none(config.get("threshold"))
     if threshold is not None:
