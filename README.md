@@ -167,38 +167,54 @@ probe, security scan, no core overrides). Catalog listing — the one that shows
 this repository at a full commit SHA; the entry is drafted in `contrib/plugin-catalog-entry.yaml`
 once that review is worth opening.
 
-## Measured, not claimed
+## Measured, not claimed — and the answer is "not for production"
 
-Five tasks, 115 calls, zero failures, p50 1.4 s / p95 2.4 s (4 concurrent). Ground truth: my own
-labels for the synthetic sets, the git file list for the gate test, the folder name for the routing
-test. Labels are mine, so treat the numbers as a shape, not a benchmark table.
+Three rounds of testing. The first two were mine, on small hand-built sets, and they looked
+encouraging. The third was 1,099 scored calls with majority-class baselines, and it killed every use
+case. Read that one first.
 
-| Task | Result | What it means |
+### Round 3 — 1,099 calls, four use cases, all rejected
+
+| Use case | Result |
+|---|---|
+| "Documentation-only?" gate, 238 commits | **130/226 code commits passed the 0.9 gate as docs** — worse than "always say code" (95%). I reproduced it independently on 40 commits: 28/40 cleared 0.9. Ship the `git diff --name-only` rule (238/238, free) |
+| "Is this thread waiting for me?" on 62 real mail threads | waiting recall **0.182** against a required 0.95; the sender blocklist it would replace is at 1.000 |
+| Phishing pre-flag on 33 real receipts/alerts + 12 scams | precision **0.279**; 31 of 33 legitimate mails flagged, 24 at p = 1.000 |
+| "Is this page text talking to the AI?" (30 injections, 49 pages) | best false-alarm rate at recall 0.90 was **20.4%** (limit 10%), and the two hardest misses are the attacker-shaped ones |
+
+Full report: `2026-11-03-laya-oneshot-use-case-tests.md` in the owner's vault. The numbers above are
+reproducible from the scripts in this repo plus the corpus named there.
+
+**What that means for you: don't put this in a pipeline that matters.** A 400M-parameter encoder
+reading wording cannot tell a receipt from a fraud, or a code fix from a docstring change, however
+confident it looks. On every use case that was measured properly, a deterministic rule — file
+extension, sender address, a regex — was exact, free, and beat it.
+
+### Rounds 1–2, for the record (small sets, since refuted)
+
+| Task | Result | Status |
 |---|---|---|
-| Email triage, 4 categories, 12 mails | 9/12 (75%) | security mails read as "billing" — BEC is the weak class |
-| "Documentation-only?" gate, 29 commits | 26/29 (90%) | 18/18 code commits never passed as docs — safe failure direction |
-| Phishing / not, 8 emails (4 scams) | 7/8 (88%) | 4/4 scams caught, 1 false positive on a real reset mail |
-| Short text, binary question (control) | 7/8 (88%) | clean 0.00 on off-topic, 0.7–0.8 on infrastructure |
-| Hungarian triage, 6 mails | 4/6 (67%) | billing ↔ technical confusion |
-| Domain routing over 20 skill docs | **withdrawn** | see below — the labels did not measure the question |
+| "Documentation-only?" gate, 29 commits | 26/29 (90%), *"18/18 code commits never passed"* | **refuted** in round 3 |
+| Phishing / not, 8 emails (4 scams) | 7/8 (88%) | **refuted** at scale (precision 0.279) |
+| Email triage, 4 categories, 12 mails | 9/12 (75%) | superseded |
+| Short text, binary question (control) | 7/8 (88%), 0.00 on off-topic | holds — it does discriminate on short clean text |
+| Domain routing over 20 skill docs | 60%, then 55% | **withdrawn** — the labels measured my filing system, not the question |
 
-**One test was withdrawn.** I first reported 60% on "route this document to its domain", using the
-skill's own folder as ground truth, then 55% after rewriting the label descriptions. Both numbers are
-garbage: every one of those documents contains install steps, ssh commands and file paths, so
-"is this about server infrastructure?" was answered *truthfully* for nearly all of them — the labels
-measured my filing system, not the question. A control with eight short unambiguous texts scored 7/8,
-with 0.00 on off-topic input, which is what disproved my "it just says yes" reading.
+Two things that did survive, and they are about question design rather than model size:
 
-Two lessons that survived, both about question design rather than model size:
-
-1. **Ask narrow questions.** The bank-details mail scored "billing" 0.61 as a 4-way category, and
-   0.99 when asked directly "is this phishing?". Multiple yes/no questions beat one wide choice.
+1. **Ask narrow questions.** A bank-change scam scored "billing" 0.61 inside a 4-way category and
+   0.99 when asked directly "is this phishing?" — though round 3 showed even 0.99 does not mean the
+   flag is worth anything, because real receipts also score 1.000.
 2. **Do not ask a question that is "sort of" true for most of your inputs.** If the answer is
    ambiguous in your own head, the probability you get back means nothing — and it will still look
    confident.
 
-Confidence numbers are not calibrated — right and wrong answers both arrive at 0.5–1.0. Read the
-ranking, and put a human behind any threshold you have not tuned on your own examples.
+The probabilities are not calibrated. Right and wrong answers both arrive at 0.5–1.0.
+
+**So why does this repo exist?** As the smallest working example of the *operating model*: an open
+encoder, loaded per call on a machine that is otherwise off, over ssh, with no daemon and no key. The
+plumbing is the contribution. The model is a demo, and the honest thing to say about a demo is where
+it stops.
 
 ## Credit
 
