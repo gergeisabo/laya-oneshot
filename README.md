@@ -152,18 +152,26 @@ test. Labels are mine, so treat the numbers as a shape, not a benchmark table.
 | Task | Result | What it means |
 |---|---|---|
 | Email triage, 4 categories, 12 mails | 9/12 (75%) | security mails read as "billing" — BEC is the weak class |
-| Domain routing, 20 real skill docs | 12/20 (60%) | long abstract prose defeats 4-way classification |
-| same, sharper label descriptions | 11/20 (55%) | better wording did not help; the task shape is the problem |
 | "Documentation-only?" gate, 29 commits | 26/29 (90%) | 18/18 code commits never passed as docs — safe failure direction |
 | Phishing / not, 8 emails (4 scams) | 7/8 (88%) | 4/4 scams caught, 1 false positive on a real reset mail |
+| Short text, binary question (control) | 7/8 (88%) | clean 0.00 on off-topic, 0.7–0.8 on infrastructure |
 | Hungarian triage, 6 mails | 4/6 (67%) | billing ↔ technical confusion |
+| Domain routing over 20 skill docs | **withdrawn** | see below — the labels did not measure the question |
 
-Two lessons from running it, both in the design of the questions rather than the model:
+**One test was withdrawn.** I first reported 60% on "route this document to its domain", using the
+skill's own folder as ground truth, then 55% after rewriting the label descriptions. Both numbers are
+garbage: every one of those documents contains install steps, ssh commands and file paths, so
+"is this about server infrastructure?" was answered *truthfully* for nearly all of them — the labels
+measured my filing system, not the question. A control with eight short unambiguous texts scored 7/8,
+with 0.00 on off-topic input, which is what disproved my "it just says yes" reading.
+
+Two lessons that survived, both about question design rather than model size:
 
 1. **Ask narrow questions.** The bank-details mail scored "billing" 0.61 as a 4-way category, and
    0.99 when asked directly "is this phishing?". Multiple yes/no questions beat one wide choice.
-2. **Short, concrete inputs.** A 1,500-character internal document about a research pipeline really
-   does read like a devops note. Feed it a message, not a manual.
+2. **Do not ask a question that is "sort of" true for most of your inputs.** If the answer is
+   ambiguous in your own head, the probability you get back means nothing — and it will still look
+   confident.
 
 Confidence numbers are not calibrated — right and wrong answers both arrive at 0.5–1.0. Read the
 ranking, and put a human behind any threshold you have not tuned on your own examples.
