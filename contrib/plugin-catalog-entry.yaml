@@ -2,7 +2,7 @@
 # Open as a PR adding plugin-catalog/laya-oneshot.yaml, pinned at the SHA below.
 name: laya-oneshot
 repo: https://github.com/gergeisabo/laya-oneshot
-sha: 7b76de485b92040eb399cb341bc4e7c6236bfd6e
+sha: b3ba076699dd9d606230589487413fe71e7e1827
 description: >-
   Ask typed questions about a piece of text — yes/no, pick one of N, a score on a
   scale — and get probabilities back in about a second, from an open Laya model that is
