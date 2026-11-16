@@ -55,11 +55,25 @@ def _hungarian_score(state: str) -> tuple[int, int]:
     return hits, digraphs
 
 
+def known_checkpoints() -> frozenset[str]:
+    """Aliases and repo ids the tool is allowed to load. Nothing else."""
+    return frozenset(ALIASES) | frozenset(ALIASES.values())
+
+
+def resolve_checkpoint(requested: str) -> str:
+    if requested in ALIASES:
+        return ALIASES[requested]
+    if requested in ALIASES.values():
+        return requested
+    known = ", ".join(sorted(set(ALIASES.values())))
+    raise ValueError(f"unknown checkpoint {requested!r} — use one of: {known}")
+
+
 def choose_checkpoint(state: str, requested: str | None = None,
                       language: str | None = None) -> tuple[str, str]:
     """Return (repo id, why). Explicit request beats explicit language beats the heuristic."""
     if requested:
-        return ALIASES.get(requested, requested), "requested"
+        return resolve_checkpoint(requested), "requested"
     lang = (language or "auto").strip().lower()
     if lang in ("hu", "hun", "hungarian", "multilingual", "multi"):
         return REPO_MULTILINGUAL, f"language={lang}"

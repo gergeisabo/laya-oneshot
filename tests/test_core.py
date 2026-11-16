@@ -62,8 +62,10 @@ class TestCheckpoint(unittest.TestCase):
         self.assertEqual(pick_checkpoint("x", "multilingual"),
                          "convaiinnovations/laya-multilingual")
 
-    def test_explicit_repo_passes_through(self):
-        self.assertEqual(pick_checkpoint("x", "someone/custom-laya"), "someone/custom-laya")
+    def test_unknown_repo_is_refused(self):
+        with self.assertRaises(ValueError) as ctx:
+            pick_checkpoint("x", "someone/custom-laya")
+        self.assertIn("convaiinnovations/laya", str(ctx.exception))
 
 
 class TestCheckpointLanguage(unittest.TestCase):
@@ -166,6 +168,80 @@ class TestRemoteCommand(unittest.TestCase):
         cmd = remote_command(payload)
         self.assertIn("touch /tmp/pwned", cmd)      # inside quotes, not executed as a separate command
         self.assertNotIn("; touch /tmp/pwned;", cmd)
+
+
+class TestRemoteHost(unittest.TestCase):
+    payload = {"state": "hi", "questions": {}, "model": "convaiinnovations/laya"}
+
+    def test_host_follows_end_of_options(self):
+        from unittest import mock
+        from laya_oneshot.transport import run_remote
+        done = mock.Mock(returncode=0, stdout='{"answers": {}}', stderr="")
+        with mock.patch("laya_oneshot.transport.subprocess.run", return_value=done) as run:
+            run_remote(self.payload, "me@example.internal")
+        argv = run.call_args[0][0]
+        self.assertEqual(argv[argv.index("--") + 1], "me@example.internal")
+        self.assertEqual(argv[0], "ssh")
+
+    def test_option_shaped_host_is_refused(self):
+        from unittest import mock
+        from laya_oneshot.transport import TransportError, run_remote
+        with mock.patch("laya_oneshot.transport.subprocess.run") as run:
+            with self.assertRaises(TransportError):
+                run_remote(self.payload, "-oSomeOption=value")
+        run.assert_not_called()
+
+
+class TestPluginSurface(unittest.TestCase):
+    def plugin(self):
+        import importlib.util
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[1] / "__init__.py"
+        spec = importlib.util.spec_from_file_location("laya_oneshot_plugin", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_tool_schema_has_no_host_and_only_known_models(self):
+        plugin = self.plugin()
+
+        class Ctx:
+            def register_tool(self, **kw):
+                self.kw = kw
+
+        ctx = Ctx()
+        plugin.register(ctx)
+        props = ctx.kw["schema"]["parameters"]["properties"]
+        self.assertNotIn("host", props)
+        self.assertEqual(set(props["model"]["enum"]), {
+            "laya", "laya:en", "english",
+            "multilingual", "laya:multilingual",
+            "laya:typed-decisions",
+            "convaiinnovations/laya",
+            "convaiinnovations/laya-multilingual",
+            "convaiinnovations/laya-typed-decisions",
+        })
+
+    def test_call_runs_the_bundled_cli_and_ignores_a_host_argument(self):
+        import sys
+        from unittest import mock
+        plugin = self.plugin()
+        done = mock.Mock(returncode=0, stdout='{"answers": {}}', stderr="")
+        with mock.patch.object(plugin.subprocess, "run", return_value=done) as run:
+            plugin._decide({"state": "hello", "host": "-oProxyCommand=touch /tmp/pwned", "model": "laya"})
+        argv = run.call_args[0][0]
+        self.assertEqual(argv[:3], [sys.executable, "-m", "laya_oneshot.cli"])
+        self.assertNotIn("--host", argv)
+        self.assertNotIn("-oProxyCommand=touch /tmp/pwned", argv)
+        self.assertEqual(run.call_args.kwargs.get("cwd"), plugin._PLUGIN_DIR)
+
+    def test_unknown_model_is_not_downloaded(self):
+        from unittest import mock
+        plugin = self.plugin()
+        with mock.patch.object(plugin.subprocess, "run") as run:
+            out = json.loads(plugin._decide({"state": "hello", "model": "someone/not-laya"}))
+        run.assert_not_called()
+        self.assertIn("error", out)
 
 
 class TestRender(unittest.TestCase):

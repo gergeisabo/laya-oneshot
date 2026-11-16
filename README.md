@@ -39,8 +39,10 @@ server through the same config file (see below).
 ## Install
 
 ```console
-$ pipx install laya-oneshot        # or: uv tool install laya-oneshot
+$ uv tool install "git+https://github.com/gergeisabo/laya-oneshot@v0.3.0"
 ```
+
+This name is not on PyPI. Install the tagged release above, not a floating git checkout.
 
 The model runtime is the separate [laya-mlx](https://github.com/mizorewww/laya-mlx) package,
 needed only on the machine that runs the prediction:

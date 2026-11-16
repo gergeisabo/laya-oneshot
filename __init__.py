@@ -1,33 +1,33 @@
 """Hermes plugin: typed decisions from an open Laya model that isn't running.
 
-Thin wrapper over the `laya-oneshot` CLI. The CLI owns the model handling; this
-plugin only exposes one tool so an agent can ask a typed question without a
-shell round trip.
+Thin wrapper over the bundled ``laya_oneshot`` package. The package owns the
+model handling; this plugin only exposes one tool so an agent can ask a typed
+question without a shell round trip.
+
+The ssh host is read only from the user's own config
+(``~/.config/laya-oneshot/config`` or ``LAYA_ONESHOT_HOST``), never from the
+tool call. The checkpoint argument is limited to the known Laya repo ids.
 """
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 PLUGIN_NAME = "laya-oneshot"
 
-_CANDIDATES = (
-    Path.home() / ".local/bin/laya-oneshot",
-    Path.home() / ".local/share/uv/tools/laya-oneshot/bin/laya-oneshot",
-    Path("/opt/homebrew/bin/laya-oneshot"),
-)
+_PLUGIN_DIR = Path(__file__).resolve().parent
+if str(_PLUGIN_DIR) not in sys.path:
+    sys.path.insert(0, str(_PLUGIN_DIR))
+
+from laya_oneshot.questions import known_checkpoints  # noqa: E402
 
 
-def _cli() -> str | None:
-    found = shutil.which("laya-oneshot")
-    if found:
-        return found
-    for candidate in _CANDIDATES:
-        if candidate.exists():
-            return str(candidate)
-    return None
+def _cli() -> list[str] | None:
+    if not (_PLUGIN_DIR / "laya_oneshot" / "cli.py").is_file():
+        return None
+    return [sys.executable, "-m", "laya_oneshot.cli"]
 
 
 def _decide(args=None, **kw):
@@ -40,23 +40,29 @@ def _decide(args=None, **kw):
     if not cli:
         return json.dumps({
             "error": "laya-oneshot is not installed",
-            "install": "uv tool install git+https://github.com/gergeisabo/laya-oneshot",
+            "install": "reinstall the plugin: hermes plugins install gergeisabo/laya-oneshot",
         })
 
-    cmd = [cli, "--json"]
+    model = args.get("model")
+    if model and str(model) not in known_checkpoints():
+        return json.dumps({
+            "error": f"unknown checkpoint {model!r}",
+            "allowed": sorted(known_checkpoints()),
+        })
+
+    cmd = [*cli, "--json"]
     preset = args.get("preset")
     if preset:
         cmd += ["--preset", str(preset)]
     for question in args.get("ask") or []:
         cmd += ["--ask", str(question)]
-    if args.get("host"):
-        cmd += ["--host", str(args["host"])]
-    if args.get("model"):
-        cmd += ["--model", str(args["model"])]
+    if model:
+        cmd += ["--model", str(model)]
     cmd += ["--", state]
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=180, cwd=_PLUGIN_DIR)
     except subprocess.TimeoutExpired:
         return json.dumps({"error": "the decision model did not answer in 180s"})
     if proc.returncode != 0:
@@ -78,7 +84,8 @@ def register(ctx):
                 "second: yes/no, pick one of N, or a score on a scale. Returns the Jev-shaped "
                 "JSON (answers, probabilities, usage). Use it as a cheap filter in front of an "
                 "expensive model call — triage, routing, guardrails, yes/no gates. It does not "
-                "generate text and it keeps nothing running."
+                "generate text and it keeps nothing running. The model host comes from the "
+                "user's laya-oneshot config, not from this call."
             ),
             "parameters": {
                 "type": "object",
@@ -99,13 +106,10 @@ def register(ctx):
                         "items": {"type": "string"},
                         "description": "Your own yes/no questions instead of a preset. Repeatable.",
                     },
-                    "host": {
-                        "type": "string",
-                        "description": "Run the model on this ssh host instead of locally, e.g. me@10.0.0.5.",
-                    },
                     "model": {
                         "type": "string",
-                        "description": "Force a checkpoint; default picks by script (English vs multilingual).",
+                        "enum": sorted(known_checkpoints()),
+                        "description": "Force one of the known Laya checkpoints. Default picks by script.",
                     },
                 },
                 "required": ["state"],

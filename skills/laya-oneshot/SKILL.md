@@ -54,4 +54,4 @@ your own data; it has been measured wrong on textbook cases.
 The model usually lives on another machine (`host=` and `predict=` in
 `~/.config/laya-oneshot/config`). A call takes ~1.5 s cold. `exit 2` with "is it asleep?" means the
 model host is asleep, not that the tool is broken. Install with
-`uv tool install git+https://github.com/gergeisabo/laya-oneshot`.
+`uv tool install "git+https://github.com/gergeisabo/laya-oneshot@v0.3.0"`.

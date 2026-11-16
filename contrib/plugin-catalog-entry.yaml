@@ -17,7 +17,7 @@ maintainer: gergeisabo
 tier: community
 category: tools
 docs_url: https://github.com/gergeisabo/laya-oneshot#readme
-version: "0.2.0"
+version: "0.3.0"
 platforms: [linux, macos]
 capabilities:
   provides_tools: [laya_decide]
